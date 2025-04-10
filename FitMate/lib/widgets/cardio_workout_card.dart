@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:fitmate/services/api_service.dart';
 import 'package:fitmate/screens/workout_screens/cardio_active_workout_screen.dart';
-
-// Import the shared image cache service
 import 'package:fitmate/services/workout_image_cache.dart';
 
 class CardioWorkoutCard extends StatefulWidget {
@@ -16,18 +13,15 @@ class CardioWorkoutCard extends StatefulWidget {
 }
 
 class _CardioWorkoutCardState extends State<CardioWorkoutCard> {
-  // Get the singleton image cache instance
   final _imageCache = WorkoutImageCache();
-  late ImageProvider _imageProvider;
   
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     
-    // Get the shared image provider and preload it
-    _imageProvider = _imageCache.getImageProvider(ApiService.baseUrl, widget.workout);
+    //preload image
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _imageCache.preloadImage(context, ApiService.baseUrl, widget.workout);
+      _imageCache.preloadCardioImage(context, widget.workout);
     });
   }
   
@@ -53,27 +47,14 @@ class _CardioWorkoutCardState extends State<CardioWorkoutCard> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 20),
-                // Using the shared image provider for consistent caching
+                //shared image provider
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: Image(
-                    image: _imageProvider,
+                  child: _imageCache.getCardioImageWidget(
+                    workout: widget.workout,
                     height: 150,
                     width: double.infinity,
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        height: 150,
-                        color: Colors.grey[200],
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.directions_run, size: 60, color: Colors.grey[700]),
-                            Text('Image not available', style: TextStyle(color: Colors.grey[700])),
-                          ],
-                        ),
-                      );
-                    },
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -103,7 +84,7 @@ class _CardioWorkoutCardState extends State<CardioWorkoutCard> {
                 const SizedBox(height: 24),
                 ElevatedButton(
                   onPressed: () {
-                    Navigator.pop(context); // Close dialog
+                    Navigator.pop(context); //close th dialog
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -180,7 +161,7 @@ class _CardioWorkoutCardState extends State<CardioWorkoutCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Card header with workout name
+            //header w workout name
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: const BoxDecoration(
@@ -207,30 +188,23 @@ class _CardioWorkoutCardState extends State<CardioWorkoutCard> {
                 ],
               ),
             ),
-            // Card body with workout image and details
+            //card body w workout image and details
             Stack(
               children: [
-                // Using the shared image provider
+                //shared image cache service
                 ClipRRect(
                   borderRadius: const BorderRadius.only(
                     bottomLeft: Radius.circular(16),
                     bottomRight: Radius.circular(16),
                   ),
-                  child: Image(
-                    image: _imageProvider,
+                  child: _imageCache.getCardioImageWidget(
+                    workout: widget.workout,
                     height: 180,
                     width: double.infinity,
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        height: 180,
-                        color: Colors.grey[200],
-                        child: Icon(Icons.directions_run, size: 60, color: Colors.grey[700]),
-                      );
-                    },
                   ),
                 ),
-                // Overlay with key workout details
+                //overlay w key workout details
                 Positioned(
                   bottom: 0,
                   left: 0,
@@ -275,17 +249,26 @@ class _CardioWorkoutCardState extends State<CardioWorkoutCard> {
   }
   
   Widget _buildStat(IconData icon, String value) {
+    //define max char length before truncating for overflow issues
+    const int maxLength = 8;
+    
+    //truncate text if it exceeds the max char length
+    final String displayText = value.length > maxLength 
+        ? value.substring(0, maxLength) + "..."
+        : value;
+    
     return Row(
       children: [
         Icon(icon, color: Colors.white, size: 16),
         const SizedBox(width: 4),
         Text(
-          value,
+          displayText,
           style: GoogleFonts.dmSans(
             fontSize: 14,
             color: Colors.white,
             fontWeight: FontWeight.w500,
           ),
+          overflow: TextOverflow.ellipsis,
         ),
       ],
     );

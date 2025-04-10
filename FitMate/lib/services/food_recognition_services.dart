@@ -6,7 +6,7 @@ import 'package:http_parser/http_parser.dart';
 import 'package:fitmate/models/food.dart';
 
 class Food_recognition_service with ChangeNotifier {
-  final String _serverUrl = 'http://192.168.0.144:5000'; // Your backend URL
+  final String _serverUrl = 'https://tunnel.fitnessmates.net'; // Your backend URL
   
   // Confidence threshold - adjust this value based on testing
   final double _confidenceThreshold = 0.6; // Requiring 60% confidence
@@ -15,7 +15,7 @@ class Food_recognition_service with ChangeNotifier {
     try {
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('$_serverUrl/recognize_food'),
+        Uri.parse('$_serverUrl/recognize_food/'),
       );
 
       request.files.add(await http.MultipartFile.fromPath(

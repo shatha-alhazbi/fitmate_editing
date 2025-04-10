@@ -12,18 +12,19 @@ import 'package:fitmate/config/provider_setup.dart';
 import 'package:fitmate/screens/login_screens/login_screen.dart';
 import 'package:fitmate/screens/login_screens/forgot_password_screen.dart';
 import 'package:fitmate/screens/login_screens/welcome_screen.dart';
-import 'package:fitmate/screens/register_screens/age_question.dart';
+import 'package:fitmate/screens/login_screens/splash_screen.dart';
 import 'package:fitmate/screens/login_screens/home_page.dart';
+import 'package:fitmate/screens/register_screens/age_question.dart';
 
 // Food Recognition and Nutrition Screens
-import 'screens/food_recognition/food_recognition_screen.dart';
-import 'screens/nutrition_screens/log_food_manually.dart';
+import 'package:fitmate/screens/food_recognition/food_recognition_screen.dart';
+import 'package:fitmate/screens/nutrition_screens/log_food_manually.dart';
 
 // Services and Repositories
-import 'services/workout_service.dart';
-import 'repositories/food_repository.dart';
-import 'services/food_recognition_services.dart';
-import 'services/food_logging_service.dart';
+import 'package:fitmate/services/workout_service.dart';
+import 'package:fitmate/repositories/food_repository.dart';
+import 'package:fitmate/services/food_recognition_services.dart';
+import 'package:fitmate/services/food_logging_service.dart';
 
 void main() async {
   // Ensure widgets are initialized before Firebase
@@ -55,7 +56,7 @@ class MyApp extends StatelessWidget {
         // Include all providers from provider_setup.dart
         ...providers,
         
-        // Additional providers from the second file
+        // Additional providers
         Provider<FoodRepository>(
           create: (_) => FoodRepository(),
         ),
@@ -76,12 +77,12 @@ class MyApp extends StatelessWidget {
           primarySwatch: Colors.blue,
           visualDensity: VisualDensity.adaptivePlatformDensity,
         ),
-        home: const AuthCheck(), // Check if user is logged in
+        home: const SplashScreen(), // Start with SplashScreen
         routes: {
           '/login': (context) => const LoginPage(),
-          '/forgot-password': (context) => ForgotPasswordPage(),
-          '/register': (context) => AgeQuestionPage(age: 0),
-          '/home': (context) => HomePage(),
+          '/forgot-password': (context) => const ForgotPasswordPage(),
+          '/register': (context) => const AgeQuestionPage(),
+          '/home': (context) => const HomePage(),
           '/food_recognition': (context) => const FoodRecognitionScreen(),
           '/manual_food_log': (context) => const LogFoodManuallyScreen(),
         },
@@ -102,7 +103,7 @@ class AuthCheck extends StatelessWidget {
           return const Center(child: CircularProgressIndicator()); // Loading state
         }
         if (snapshot.hasData) {
-          return HomePage(); // User is logged in
+          return const HomePage(); // User is logged in
         } else {
           return const WelcomePage(); // User is not logged in
         }
