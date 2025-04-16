@@ -85,6 +85,7 @@ class _NutritionPageState extends State<NutritionPage>
       child: Consumer<NutritionViewModel>(
         builder: (context, viewModel, child) {
           return Scaffold(
+            backgroundColor: const Color(0xFFFAFAFA),
             appBar: AppBar(
               title: Text(
                 'NUTRITION',

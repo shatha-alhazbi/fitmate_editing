@@ -83,7 +83,7 @@ class BottomNavBar extends StatelessWidget {
         ],
         selectedItemColor: Color(0xFFD2EB50),
         unselectedItemColor: Colors.grey,
-        backgroundColor: Color(0xFF0e0f16),
+        backgroundColor: Colors.white,
       ),
     );
   }

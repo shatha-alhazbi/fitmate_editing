@@ -7,6 +7,7 @@ import 'analyzers/bicep_curl_analyzer.dart';
 import 'widgets/exercise_ui_components.dart';
 import 'base_exercise_detection_screen.dart';
 import 'package:fitmate/widgets/pose_painter.dart';
+import 'dart:math' as math;
 
 class BicepCurlDetectionScreen extends BaseExerciseDetectionScreen {
   const BicepCurlDetectionScreen({Key? key}) 
@@ -23,6 +24,8 @@ class _BicepCurlDetectionScreenState extends BaseExerciseDetectionState<BicepCur
   int countdownValue = 3;
   bool showPoseGuide = true;
   String lastFormFeedback = '';
+  String lastPositionFeedback = '';
+  bool hasSpokenPositionFeedback = false;
   
   @override
   void initState() {
@@ -40,6 +43,16 @@ class _BicepCurlDetectionScreenState extends BaseExerciseDetectionState<BicepCur
     
     // Start countdown
     _startCountdown();
+    
+    // Delay the start of voice feedback
+    Future.delayed(Duration(seconds: 8), () {
+      if (mounted) {
+        print("Voice feedback system activated");
+        // This marks when we start allowing voice feedback
+        lastFormFeedbackTime = DateTime.now().millisecondsSinceEpoch;
+        lastPositiveFeedbackTime = DateTime.now().millisecondsSinceEpoch;
+      }
+    });
   }
   
   Future<void> _initializeServices() async {
@@ -61,14 +74,6 @@ class _BicepCurlDetectionScreenState extends BaseExerciseDetectionState<BicepCur
           } else {
             // When we reach 1, set showCountdown to false
             showCountdown = false;
-            // Show pose guide briefly
-            Future.delayed(Duration(seconds: 3), () {
-              if (mounted) {
-                setState(() {
-                  showPoseGuide = false;
-                });
-              }
-            });
           }
         });
       }
@@ -80,20 +85,76 @@ class _BicepCurlDetectionScreenState extends BaseExerciseDetectionState<BicepCur
     // Process pose using the bicep curl analyzer
     analyzer.analyzePose(pose);
     
-    // Get current feedback text
-    String currentFeedback = analyzer.getFormFeedback();
+    // Check position feedback first
+    String currentPositionFeedback = '';
+    if (analyzer.facingDirection == "Facing Camera") {
+      currentPositionFeedback = "Please turn sideways to the camera for proper bicep curl analysis";
+    }
     
-    // Check if feedback has changed
-    if (currentFeedback != lastFormFeedback) {
-      print("Feedback changed to: $currentFeedback");
-      lastFormFeedback = currentFeedback;
+    // Handle position feedback with voice
+    if (currentPositionFeedback.isNotEmpty && 
+        (currentPositionFeedback != lastPositionFeedback || !hasSpokenPositionFeedback)) {
+      print("Speaking position feedback: $currentPositionFeedback");
+      voiceFeedback.speak(currentPositionFeedback);
+      lastPositionFeedback = currentPositionFeedback;
+      hasSpokenPositionFeedback = true;
       
-      // Determine if this feedback should be spoken
-      bool shouldSpeak = shouldSpeakFeedback(currentFeedback);
+      // Reset the flag after 10 seconds to allow reminding again if needed
+      Future.delayed(Duration(seconds: 10), () {
+        if (mounted) {
+          hasSpokenPositionFeedback = false;
+        }
+      });
+    } else if (currentPositionFeedback.isEmpty) {
+      // Reset when position is correct
+      lastPositionFeedback = '';
+      hasSpokenPositionFeedback = false;
+    }
+    
+    // Only process form feedback if position is correct
+    if (analyzer.facingDirection != "Facing Camera") {
+      // Get current form feedback text
+      String currentFormFeedback = analyzer.getFormFeedback();
+      int currentTime = DateTime.now().millisecondsSinceEpoch;
       
-      if (shouldSpeak) {
-        print("Speaking feedback: $currentFeedback");
-        voiceFeedback.speak(currentFeedback);
+      // Check if feedback has changed
+      if (currentFormFeedback != lastFormFeedback) {
+        print("Feedback changed to: $currentFormFeedback");
+        lastFormFeedback = currentFormFeedback;
+        
+        // Determine if this feedback should be spoken
+        bool shouldSpeak = shouldSpeakFeedback(currentFormFeedback);
+        
+        // Check if enough time has passed since last feedback
+        bool timeCheckPassed = (currentTime - lastFormFeedbackTime) > minMsBetweenFormFeedback;
+        
+        if (shouldSpeak && timeCheckPassed) {
+          print("Speaking feedback: $currentFormFeedback");
+          voiceFeedback.speak(currentFormFeedback);
+          lastFormFeedbackTime = currentTime;
+        }
+      }
+      
+      // Provide occasional positive feedback when form is good
+      // Check if form indicators suggest good form
+      bool goodForm = analyzer.activeArm != "none" &&
+                     analyzer.activeArmAnalysis.elbowStatus == "Good" && 
+                     analyzer.activeArmAnalysis.formStatus == "Good" &&
+                     currentFormFeedback.contains("Good");
+                     
+      if (goodForm) {
+        // Check if enough time has passed since last positive feedback
+        bool positiveTimeCheckPassed = (currentTime - lastPositiveFeedbackTime) > minMsBetweenPositiveFeedback;
+        
+        if (positiveTimeCheckPassed) {
+          // Select a random positive feedback message
+          final random = math.Random();
+          final message = positiveFeedbackMessages[random.nextInt(positiveFeedbackMessages.length)];
+          
+          print("Speaking positive feedback: $message");
+          voiceFeedback.speak(message);
+          lastPositiveFeedbackTime = currentTime;
+        }
       }
     }
 
@@ -105,7 +166,7 @@ class _BicepCurlDetectionScreenState extends BaseExerciseDetectionState<BicepCur
   bool shouldSpeakFeedback(String feedback) {
     // List of important feedback phrases to speak out loud
     List<String> importantPhrases = [ 
-      "keep your elbow close","Curl all the way up"
+      "keep your elbow close"
     ];
     
     // Check if the feedback contains any of the important phrases
@@ -117,6 +178,20 @@ class _BicepCurlDetectionScreenState extends BaseExerciseDetectionState<BicepCur
     
     return false;
   }
+  
+  // Delay between form feedback voice messages
+  int lastFormFeedbackTime = 0;
+  final int minMsBetweenFormFeedback = 4000; // 4 seconds between feedback
+  
+  // For positive feedback when form is good
+  int lastPositiveFeedbackTime = 0;
+  final int minMsBetweenPositiveFeedback = 15000; // 15 seconds between positive feedback
+  final List<String> positiveFeedbackMessages = [
+    "Excellent form",
+    "Great job, keep it up",
+    "Perfect form, you're doing great",
+    "You've got it, excellent technique"
+  ];
   
   @override
   void dispose() {
@@ -140,21 +215,7 @@ class _BicepCurlDetectionScreenState extends BaseExerciseDetectionState<BicepCur
           ),
         ),
         
-        // Pose guide overlay (transparent outline of correct form)
-        if (showPoseGuide && !showCountdown)
-          Positioned.fill(
-            child: Opacity(
-              opacity: 0.4,
-              child: Container(
-                alignment: Alignment.center,
-                child: Image.asset(
-                  'assets/data/images/workouts/image 5.png',
-                  height: MediaQuery.of(context).size.height * 0.7,
-                  fit: BoxFit.contain,
-                ),
-              ),
-            ),
-          ),
+        // Pose guide removed
         
         // Pose overlay when pose is detected
         if (currentPose != null && !showCountdown)
@@ -220,40 +281,44 @@ class _BicepCurlDetectionScreenState extends BaseExerciseDetectionState<BicepCur
           ),
           
         if (!showCountdown) ...[
-          // Top status row with enhanced design
+          // Position warning if user is facing the camera
+          if (analyzer.facingDirection == "Facing Camera")
+            Positioned(
+              top: 160,
+              left: 0,
+              right: 0,
+              child: Container(
+                margin: EdgeInsets.symmetric(horizontal: 20),
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded, color: Colors.white, size: 30),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        "Please turn sideways to the camera for proper bicep curl analysis",
+                        style: GoogleFonts.dmSans(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            
+          // No longer needed since status row is at the top
+          
+          // Status row - Form status only - moved back to the top
           Positioned(
             top: 0,
-            left: 0,
-            right: 0,
-            child: ExerciseUIComponents.buildStatusRow(
-              statusBoxes: [
-                // Custom Rep counter
-                analyzer.activeArm == "none" 
-                ? ExerciseUIComponents.buildStatusBox(
-                    label: 'REPS',
-                    value: 'UNK',
-                    color: Colors.grey,
-                    fontSize: 20,
-                  )
-                : ExerciseUIComponents.buildRepCounter(
-                    count: analyzer.activeArmAnalysis.counter,
-                  ),
-                
-                // Active arm display with icon
-                ExerciseUIComponents.buildStatusBox(
-                  label: 'ARM',
-                  value: analyzer.activeArm.toUpperCase(),
-                  color: analyzer.activeArm == "none" 
-                         ? Colors.grey 
-                         : ExerciseUIComponents.primaryColor,
-                ),
-              ],
-            ),
-          ),
-          
-          // Second status row - Elbow and Form status with improved design
-          Positioned(
-            top: 80,
             left: 0,
             right: 0,
             child: ExerciseUIComponents.buildStatusRow(
@@ -262,7 +327,7 @@ class _BicepCurlDetectionScreenState extends BaseExerciseDetectionState<BicepCur
                 ExerciseUIComponents.buildStatusBox(
                   label: 'ELBOW',
                   value: analyzer.activeArm == "none" ? 
-                         'UNK' : analyzer.activeArmAnalysis.elbowStatus,
+                         '—' : analyzer.activeArmAnalysis.elbowStatus,
                   color: analyzer.activeArm == "none" ? 
                          Colors.grey : ExerciseUIComponents.getStatusColor(
                            analyzer.activeArmAnalysis.elbowStatus
@@ -273,7 +338,7 @@ class _BicepCurlDetectionScreenState extends BaseExerciseDetectionState<BicepCur
                 ExerciseUIComponents.buildStatusBox(
                   label: 'FORM',
                   value: analyzer.activeArm == "none" ? 
-                         'UNK' : analyzer.activeArmAnalysis.formStatus,
+                         '—' : analyzer.activeArmAnalysis.formStatus,
                   color: analyzer.activeArm == "none" ? 
                          Colors.grey : ExerciseUIComponents.getStatusColor(
                            analyzer.activeArmAnalysis.formStatus
@@ -294,26 +359,11 @@ class _BicepCurlDetectionScreenState extends BaseExerciseDetectionState<BicepCur
                 ExerciseUIComponents.buildFeedbackBox(
                   feedbackText: analyzer.getFormFeedback(),
                 ),
-                
               ],
             ),
           ),
           
-          // Help button
-          Positioned(
-            top: 20,
-            right: 20,
-            child: FloatingActionButton(
-              mini: true,
-              backgroundColor: Colors.black54,
-              child: Icon(Icons.help_outline, color: Colors.white),
-              onPressed: () {
-                setState(() {
-                  showPoseGuide = !showPoseGuide;
-                });
-              },
-            ),
-          ),
+          // Help button removed
         ],
       ],
     );

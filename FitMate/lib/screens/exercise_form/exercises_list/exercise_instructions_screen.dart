@@ -239,6 +239,10 @@ class _FormInstructionsPageState extends State<FormInstructionsPage> with Single
         ),
         backgroundColor: Colors.white,
         iconTheme: const IconThemeData(color: Colors.black),
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
       ),
       body: Column(
         children: [

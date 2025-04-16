@@ -17,6 +17,7 @@ class _WelcomePageState extends State<WelcomePage>
   late Animation<double> _fadeAnimation;
   late AnimationController _catController;
   late WelcomeViewModel _viewModel;
+  bool _isReady = false;
 
   @override
   void initState() {
@@ -50,6 +51,24 @@ class _WelcomePageState extends State<WelcomePage>
 
     // Listen for animation changes from the ViewModel
     _setupAnimationListeners();
+    
+    // Simulate any loading the WelcomePage might need
+    _prepareWelcomePage();
+  }
+  
+  // Method to prepare any data needed for the welcome page
+  Future<void> _prepareWelcomePage() async {
+    // Any initialization logic for the welcome page
+    // For example, loading animations, preparing assets, etc.
+    
+    // Simulate some initialization time
+    await Future.delayed(Duration(milliseconds: 100));
+    
+    if (mounted) {
+      setState(() {
+        _isReady = true;
+      });
+    }
   }
 
   void _setupAnimationListeners() {

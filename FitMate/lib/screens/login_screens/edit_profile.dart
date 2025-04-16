@@ -254,6 +254,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     return Consumer<EditProfileViewModel>(
       builder: (context, viewModel, child) {
         return Scaffold(
+          backgroundColor: const Color(0xFFFAFAFA),
           appBar: AppBar(
             title: Text(
               'EDIT PROFILE',

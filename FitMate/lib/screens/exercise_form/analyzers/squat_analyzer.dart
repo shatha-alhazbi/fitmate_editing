@@ -22,10 +22,12 @@ class SquatAnalyzer {
   // Form status
   String footPlacement = "UNK";
   String kneePlacement = "UNK";
+  String facingDirection = "UNK"; // Added direction status
   
   // Debug values
   double kneeFootRatio = 0.0;
   double footShoulderRatio = 0.0;
+  double shoulderWidth = 0.0; // Added for position detection
   
   // Added to prevent counting reps too quickly
   int _lastRepTimestamp = 0;
@@ -61,7 +63,11 @@ class SquatAnalyzer {
       if (!allLandmarksVisible) {
         footPlacement = "UNK";
         kneePlacement = "UNK";
+        facingDirection = "UNK";
       }
+
+      // Check position/orientation for squat (should be facing the camera)
+      _analyzeFacingDirection(landmarks);
 
       // Do rep counting ONLY if all landmarks are visible
       if (allLandmarksVisible) {
@@ -76,6 +82,49 @@ class SquatAnalyzer {
     }
   }
   
+  /// Analyze if the user is facing the camera or sideways
+  void _analyzeFacingDirection(Map<PoseLandmarkType, PoseLandmark> landmarks) {
+    final leftShoulder = landmarks[PoseLandmarkType.leftShoulder];
+    final rightShoulder = landmarks[PoseLandmarkType.rightShoulder];
+    final nose = landmarks[PoseLandmarkType.nose];
+    
+    // If key points aren't visible, can't determine direction
+    if (leftShoulder == null || rightShoulder == null || nose == null ||
+        leftShoulder.likelihood < VISIBILITY_THRESHOLD ||
+        rightShoulder.likelihood < VISIBILITY_THRESHOLD ||
+        nose.likelihood < VISIBILITY_THRESHOLD) {
+      facingDirection = "UNK";
+      return;
+    }
+    
+    // Calculate shoulder width
+    shoulderWidth = PoseUtils.calculateDistance(
+      [leftShoulder.x, leftShoulder.y],
+      [rightShoulder.x, rightShoulder.y],
+    );
+    
+    // Calculate shoulder midpoint
+    List<double> shoulderMidpoint = [
+      (leftShoulder.x + rightShoulder.x) / 2,
+      (leftShoulder.y + rightShoulder.y) / 2
+    ];
+    
+    // Check if nose is aligned with shoulder midpoint
+    // If facing the camera, nose should be close to shoulder midpoint horizontally
+    double noseToMidpointHorizontalDiff = (nose.x - shoulderMidpoint[0]).abs();
+    
+    // Calculate relative distance (normalized by shoulder width to handle different distances from camera)
+    double relativeHorizontalDiff = noseToMidpointHorizontalDiff / shoulderWidth;
+    
+    // When user is facing sideways, the nose will be significantly off-center from shoulder midpoint
+    // When user is facing the camera, the nose will be close to the midpoint
+    if (relativeHorizontalDiff > 0.25) { // Threshold for sideways orientation
+      facingDirection = "Sideways";
+    } else {
+      facingDirection = "Facing Camera";
+    }
+  }
+
   /// Count reps based on knee angle
   void _countReps(Map<PoseLandmarkType, PoseLandmark> landmarks) {
     // Calculate knee angle
@@ -233,6 +282,11 @@ class SquatAnalyzer {
   
   /// Get form feedback text based on current form analysis
   String getFormFeedback() {
+    // Check position first - highest priority feedback
+    if (facingDirection == "Sideways") {
+      return "Please face the camera directly for proper squat analysis";
+    }
+    
     // If no pose is detected or visibility is low
     if (footPlacement == "UNK" && kneePlacement == "UNK") {
       return "Position yourself so your lower body is clearly visible";

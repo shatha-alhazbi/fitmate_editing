@@ -30,7 +30,6 @@ class _PlankDetectionScreenState extends State<PlankDetectionScreen> with Single
   // UI enhancement vars
   bool showCountdown = true;
   int countdownValue = 3;
-  bool showPoseGuide = true;
   bool isRecording = false;
   
   // Animation controller for breathing guide
@@ -65,31 +64,20 @@ class _PlankDetectionScreenState extends State<PlankDetectionScreen> with Single
   }
   
 void _startCountdown() {
-  Future.delayed(Duration(seconds: 1), () {
-    if (mounted) {
-      setState(() {
-        if (countdownValue > 1) {
-          countdownValue--;
-          _startCountdown(); // Continue countdown recursively
-        } else {
-          // When we reach 1, set showCountdown to false
-          showCountdown = false;
-          // Show pose guide briefly
-          Future.delayed(Duration(seconds: 3), () {
-            if (mounted) {
-              setState(() {
-                showPoseGuide = false;
-              });
-            }
-          });
-        }
-      });
-      
-      // Removed the if statement here that was causing the issue
-      // The logic for continuing the countdown is now in the setState block
-    }
-  });
-}
+    Future.delayed(Duration(seconds: 1), () {
+      if (mounted) {
+        setState(() {
+          if (countdownValue > 1) {
+            countdownValue--;
+            _startCountdown(); // Continue countdown recursively
+          } else {
+            // When we reach 1, set showCountdown to false
+            showCountdown = false;
+          }
+        });
+      }
+    });
+  }
   
   void _initializeDetector() {
     _poseDetector = PoseDetector(
@@ -305,21 +293,7 @@ void _startCountdown() {
             ),
           ),
           
-          // Pose guide overlay (transparent outline of correct form)
-          if (showPoseGuide && !showCountdown)
-            Positioned.fill(
-              child: Opacity(
-                opacity: 0.4,
-                child: Container(
-                  alignment: Alignment.center,
-                  child: Image.asset(
-                    'assets/data/images/workouts/image 4.png',
-                    height: MediaQuery.of(context).size.height * 0.7,
-                    fit: BoxFit.contain,
-                  ),
-                ),
-              ),
-            ),
+        
           
           // Pose overlay when pose is detected
           if (_currentPose != null && !showCountdown)
@@ -423,21 +397,7 @@ void _startCountdown() {
               ),
             ),
           
-            // Help button
-            Positioned(
-              top: 20,
-              right: 20,
-              child: FloatingActionButton(
-                mini: true,
-                backgroundColor: Colors.black54,
-                child: Icon(Icons.help_outline, color: Colors.white),
-                onPressed: () {
-                  setState(() {
-                    showPoseGuide = !showPoseGuide;
-                  });
-                },
-              ),
-            ),
+           
           ],
         ],
       ),

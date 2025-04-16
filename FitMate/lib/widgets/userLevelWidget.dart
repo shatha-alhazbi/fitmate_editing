@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class UserLevelWidget extends StatefulWidget {
   const UserLevelWidget({Key? key}) : super(key: key);
@@ -19,6 +20,8 @@ class _UserLevelWidgetState extends State<UserLevelWidget> with SingleTickerProv
   DateTime? _lastUpdated;
   bool _isLoading = true;
   bool _showAnimation = false;
+  bool _isMaxLevel = false;
+  String _lastAnimatedLevel = '';
 
   // Animation controller
   late AnimationController _levelAnimationController;
@@ -28,7 +31,7 @@ class _UserLevelWidgetState extends State<UserLevelWidget> with SingleTickerProv
     super.initState();
     _levelAnimationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1500),
+      duration: const Duration(milliseconds: 1200),
     );
     _loadUserData();
   }
@@ -80,13 +83,23 @@ class _UserLevelWidgetState extends State<UserLevelWidget> with SingleTickerProv
         }
 
         if (mounted) {
+          final progressData = userProgress.data() as Map<String, dynamic>;
+          final newFitnessLevel = progressData['fitnessLevel'] ?? 'Beginner';
+          final newFitnessSubLevel = progressData['fitnessSubLevel'] ?? 1;
+
+          // Check if user is at max level (Advanced Level 3)
+          final newIsMaxLevel = newFitnessLevel == 'Advanced' && newFitnessSubLevel == 3;
+
+          // Check if we should show the animation (new level achieved)
+          await _checkAndShowLevelAnimation(newFitnessLevel, newFitnessSubLevel);
+
           setState(() {
-            final progressData = userProgress.data() as Map<String, dynamic>;
-            _fitnessLevel = progressData['fitnessLevel'] ?? 'Beginner';
-            _fitnessSubLevel = progressData['fitnessSubLevel'] ?? 1;
+            _fitnessLevel = newFitnessLevel;
+            _fitnessSubLevel = newFitnessSubLevel;
             _workoutsCompleted = progressData['workoutsCompleted'] ?? 0;
             _workoutsUntilNextLevel = progressData['workoutsUntilNextLevel'] ?? 20;
             _lastUpdated = progressData['lastUpdated']?.toDate();
+            _isMaxLevel = newIsMaxLevel;
             _isLoading = false;
           });
         }
@@ -103,71 +116,98 @@ class _UserLevelWidgetState extends State<UserLevelWidget> with SingleTickerProv
     }
   }
 
-  String _getMotivationalMessage() {
-    double progress = _workoutsCompleted / _workoutsUntilNextLevel;
+  Future<void> _checkAndShowLevelAnimation(String newLevel, int newSubLevel) async {
+    final prefs = await SharedPreferences.getInstance();
+    final lastAnimatedLevel = prefs.getString('lastAnimatedLevel') ?? '';
+    final currentLevelKey = '$newLevel-$newSubLevel';
 
-    if (progress < 0.25) {
-      return "Keep going! Every workout counts.";
-    } else if (progress < 0.5) {
-      return "You're making progress! Stay consistent.";
-    } else if (progress < 0.75) {
-      return "You're over halfway there!";
-    } else if (progress < 1) {
-      return "Almost to the next level! Push through!";
-    } else {
-      return "Congratulations on reaching your next level!";
-    }
-  }
+    if (lastAnimatedLevel != currentLevelKey && !(newLevel == 'Beginner' && newSubLevel == 1)) {
+      // Store that we've shown this animation
+      await prefs.setString('lastAnimatedLevel', currentLevelKey);
 
-  void _playLevelUpAnimation() {
-    setState(() {
-      _showAnimation = true;
-    });
-    _levelAnimationController.forward().then((_) {
-      Future.delayed(Duration(seconds: 2), () {
+      // Show animation (slight delay to allow the widget to build)
+      Future.delayed(Duration(milliseconds: 300), () {
         if (mounted) {
           setState(() {
-            _showAnimation = false;
+            _showAnimation = true;
+          });
+          _levelAnimationController.forward().then((_) {
+            Future.delayed(Duration(seconds: 2), () {
+              if (mounted) {
+                setState(() {
+                  _showAnimation = false;
+                });
+                _levelAnimationController.reset();
+              }
+            });
           });
         }
       });
-    });
+    }
+  }
+
+  String _getMotivationalMessage() {
+    if (_isMaxLevel) {
+      return "Master level achieved! Keep crushing your goals!";
+    }
+
+    double progress = _workoutsCompleted / _workoutsUntilNextLevel;
+
+    if (progress < 0.25) {
+      return "Keep pushing! You've got this.";
+    } else if (progress < 0.5) {
+      return "Halfway there! Stay strong.";
+    } else if (progress < 0.75) {
+      return "The finish line is in sight!";
+    } else {
+      return "So close to leveling up! Push harder!";
+    }
   }
 
   Widget _buildCelebrationAnimation() {
     return Stack(
       alignment: Alignment.center,
       children: [
+        // Animated circle
         TweenAnimationBuilder(
           tween: Tween<double>(begin: 0, end: 1),
           duration: Duration(milliseconds: 800),
           builder: (context, double value, child) {
             return Transform.scale(
-              scale: 1 + (value * 0.3),
+              scale: 1 + (value * 0.5),
               child: Opacity(
-                opacity: 1 - (value * 0.5),
+                opacity: 1 - (value * 0.7),
                 child: Container(
-                  width: 60,
-                  height: 60,
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: _getLevelPrimaryColor().withOpacity(0.5),
+                    color: _getLevelPrimaryColor().withOpacity(0.6),
                   ),
                 ),
               ),
             );
           },
         ),
-        Icon(
-          Icons.emoji_events,
-          size: 42,
-          color: Colors.amber,
+        // Sparkle animation
+        TweenAnimationBuilder(
+          tween: Tween<double>(begin: 0, end: 1),
+          duration: Duration(milliseconds: 1000),
+          builder: (context, double value, child) {
+            return Transform.scale(
+              scale: value,
+              child: Icon(
+                Icons.emoji_events,
+                size: 26,
+                color: Colors.amber,
+              ),
+            );
+          },
         ),
       ],
     );
   }
 
-  // Get primary color based on fitness level
   // Get primary color based on fitness level
   Color _getLevelPrimaryColor() {
     switch (_fitnessLevel.toLowerCase()) {
@@ -176,15 +216,13 @@ class _UserLevelWidgetState extends State<UserLevelWidget> with SingleTickerProv
       case 'intermediate':
         return Color(0xFF83CFDF); // Bright Teal
       case 'advanced':
-        return Color(0xFFF0938C); // Coral Pink
-      case 'elite':
         return Color(0xFFFFBE3D); // Golden Yellow
       default:
         return Color(0xFFD2EB50); // Default Lime Green
     }
   }
 
-// Get secondary color based on fitness level
+  // Get secondary color based on fitness level
   Color _getLevelSecondaryColor() {
     switch (_fitnessLevel.toLowerCase()) {
       case 'beginner':
@@ -192,9 +230,7 @@ class _UserLevelWidgetState extends State<UserLevelWidget> with SingleTickerProv
       case 'intermediate':
         return Color(0xFF69B5C3); // Deeper Teal
       case 'advanced':
-        return Color(0xFFD87974); // Deeper Coral
-      case 'elite':
-        return Color(0xFFE5AA36); // Deeper Gold
+        return Color(0xFFD87974); // Deeper Gold
       default:
         return Color(0xFFB8D143); // Default Deeper Lime
     }
@@ -204,15 +240,13 @@ class _UserLevelWidgetState extends State<UserLevelWidget> with SingleTickerProv
   IconData _getLevelIcon() {
     switch (_fitnessLevel.toLowerCase()) {
       case 'beginner':
-        return Icons.fitness_center;
-      case 'intermediate':
         return Icons.self_improvement;
-      case 'advanced':
+      case 'intermediate':
         return Icons.whatshot;
-      case 'elite':
+      case 'advanced':
         return Icons.emoji_events;
       default:
-        return Icons.fitness_center;
+        return Icons.self_improvement;
     }
   }
 
@@ -222,196 +256,139 @@ class _UserLevelWidgetState extends State<UserLevelWidget> with SingleTickerProv
     double levelProgress = _workoutsCompleted / _workoutsUntilNextLevel;
     levelProgress = levelProgress.clamp(0.0, 1.0);
 
-    // Define the lighter background colors
-    final Color lightBackground = Color(0xFFF5F7FA);
-    final Color cardBackground = Color(0xFFFFFFFF);
-
     // Get level colors
     final Color primaryColor = _getLevelPrimaryColor();
     final Color secondaryColor = _getLevelSecondaryColor();
 
     if (_isLoading) {
       return Container(
-        height: 160,
-        padding: const EdgeInsets.all(16),
+        height: 120, // Even smaller height
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: cardBackground,
-          borderRadius: BorderRadius.circular(20),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 15,
-              offset: Offset(0, 5),
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: Offset(0, 3),
             ),
           ],
         ),
         child: Center(
-          child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+          child: SizedBox(
+            width: 30,
+            height: 30,
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+              strokeWidth: 2.5,
+            ),
           ),
         ),
       );
     }
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12), // Reduced padding
       decoration: BoxDecoration(
-        color: cardBackground,
-        borderRadius: BorderRadius.circular(20),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 20,
-            offset: Offset(0, 8),
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 12,
+            offset: Offset(0, 4),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
+              Container(
+                height: 42, // Smaller size
+                width: 42,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      primaryColor.withOpacity(0.8),
+                      primaryColor,
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: primaryColor.withOpacity(0.25),
+                      blurRadius: 6,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: _showAnimation
+                      ? _buildCelebrationAnimation()
+                      : Icon(
+                    _getLevelIcon(),
+                    size: 24, // Smaller icon
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text(
+                    _fitnessLevel,
+                    style: GoogleFonts.bebasNeue(
+                      color: Color(0xFF2D3748),
+                      fontSize: 20, // Smaller text
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  SizedBox(height: 3),
                   Container(
-                    height: 60,
-                    width: 60,
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          primaryColor.withOpacity(0.8),
+                          primaryColor.withOpacity(0.9),
                           primaryColor,
                         ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
                       ),
-                      shape: BoxShape.circle,
+                      borderRadius: BorderRadius.circular(8),
                       boxShadow: [
                         BoxShadow(
-                          color: primaryColor.withOpacity(0.3),
-                          blurRadius: 10,
-                          offset: Offset(0, 4),
+                          color: primaryColor.withOpacity(0.15),
+                          blurRadius: 4,
+                          offset: Offset(0, 1),
                         ),
                       ],
                     ),
-                    child: Center(
-                      child: _showAnimation
-                          ? _buildCelebrationAnimation()
-                          : Icon(
-                        _getLevelIcon(),
-                        size: 32,
+                    child: Text(
+                      "Level $_fitnessSubLevel",
+                      style: GoogleFonts.bebasNeue(
                         color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                  ),
-                  SizedBox(width: 16),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _fitnessLevel,
-                        style: GoogleFonts.bebasNeue(
-                          color: Color(0xFF2D3748),
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      SizedBox(height: 6),
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              primaryColor.withOpacity(0.9),
-                              primaryColor,
-                            ],
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: primaryColor.withOpacity(0.2),
-                              blurRadius: 8,
-                              offset: Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Text(
-                          "Level $_fitnessSubLevel",
-                          style: GoogleFonts.bebasNeue(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
                   ),
                 ],
               ),
-              if (_lastUpdated != null && DateTime.now().difference(_lastUpdated!).inDays < 3)
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Color(0xFFD2DC5C),
-                        Color(0xFF388B5C),
-                      ],
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Color(0xFF4CAF50).withOpacity(0.2),
-                        blurRadius: 8,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.bolt,
-                        color: Colors.white,
-                        size: 16,
-                      ),
-                      SizedBox(width: 6),
-                      Text(
-                        'ACTIVE',
-                        style: GoogleFonts.bebasNeue(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-          SizedBox(height: 28),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                "Progress to Next Level",
-                style: GoogleFonts.bebasNeue(
-                  color: Color(0xFF4A5568),
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              Spacer(),
               Container(
-                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: Color(0xFFF7FAFC),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: Color(0xFFE2E8F0),
                     width: 1,
@@ -421,7 +398,7 @@ class _UserLevelWidgetState extends State<UserLevelWidget> with SingleTickerProv
                   "$_workoutsCompleted/$_workoutsUntilNextLevel",
                   style: GoogleFonts.bebasNeue(
                     color: secondaryColor,
-                    fontSize: 16,
+                    fontSize: 13,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -429,80 +406,91 @@ class _UserLevelWidgetState extends State<UserLevelWidget> with SingleTickerProv
             ],
           ),
           SizedBox(height: 14),
-          Stack(
+          Row(
             children: [
-              Container(
-                height: 14,
-                decoration: BoxDecoration(
-                  color: Color(0xFFEDF2F7),
-                  borderRadius: BorderRadius.circular(7),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _isMaxLevel ? "Master Level" : "Next Level",
+                      style: GoogleFonts.bebasNeue(
+                        color: Color(0xFF4A5568),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: 6),
+                    Stack(
+                      children: [
+                        // Background bar
+                        Container(
+                          height: 8, // Extra slim progress bar
+                          decoration: BoxDecoration(
+                            color: Color(0xFFEDF2F7),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        // Progress bar
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            return AnimatedContainer(
+                              duration: Duration(milliseconds: 800),
+                              height: 8,
+                              width: constraints.maxWidth * levelProgress,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    secondaryColor.withOpacity(0.8),
+                                    primaryColor,
+                                  ],
+                                  begin: Alignment.centerLeft,
+                                  end: Alignment.centerRight,
+                                ),
+                                borderRadius: BorderRadius.circular(4),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: primaryColor.withOpacity(0.2),
+                                    blurRadius: 4,
+                                    offset: Offset(0, 1),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  return AnimatedContainer(
-                    duration: Duration(milliseconds: 1000),
-                    height: 14,
-                    width: constraints.maxWidth * levelProgress,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          secondaryColor.withOpacity(0.8),
-                          primaryColor,
-                        ],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ),
-                      borderRadius: BorderRadius.circular(7),
-                      boxShadow: [
-                        BoxShadow(
-                          color: primaryColor.withOpacity(0.3),
-                          blurRadius: 10,
-                          offset: Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-              if (levelProgress > 0.05)
-                Positioned(
-                  left: (levelProgress * MediaQuery.of(context).size.width * 0.8) - 18,
-                  top: -20,
-                  child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 6,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Text(
-                      "${(levelProgress * 100).toInt()}%",
-                      style: GoogleFonts.bebasNeue(
-                        color: primaryColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+              SizedBox(width: 8),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: primaryColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  "${(levelProgress * 100).toInt()}%",
+                  style: GoogleFonts.bebasNeue(
+                    color: primaryColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
+              ),
             ],
           ),
-          SizedBox(height: 20),
+          SizedBox(height: 12),
           Container(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
               color: Color(0xFFF7FAFC),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: Color(0xFFE2E8F0),
-                width: 1,
+                width: 0.5, // Thinner border
               ),
             ),
             child: Row(
@@ -510,16 +498,17 @@ class _UserLevelWidgetState extends State<UserLevelWidget> with SingleTickerProv
                 Icon(
                   Icons.auto_awesome,
                   color: secondaryColor,
-                  size: 18,
+                  size: 14,
                 ),
-                SizedBox(width: 10),
+                SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     _getMotivationalMessage(),
                     style: GoogleFonts.bebasNeue(
                       color: Color(0xFF4A5568),
-                      fontSize: 14,
+                      fontSize: 12,
                       fontWeight: FontWeight.w500,
+                      height: 1.1, // Tighter line height
                     ),
                   ),
                 ),

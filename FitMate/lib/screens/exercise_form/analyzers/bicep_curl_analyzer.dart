@@ -186,6 +186,10 @@ class BicepCurlAnalyzer {
   // For displaying which arm is being actively tracked
   String activeArm = "both";
   
+  // For user position detection
+  String facingDirection = "UNK";
+  static const double VISIBILITY_THRESHOLD = 0.5;
+  
   // Required landmarks for bicep curl analysis
   final List<PoseLandmarkType> REQUIRED_LANDMARKS = [
     PoseLandmarkType.leftShoulder,
@@ -201,6 +205,9 @@ class BicepCurlAnalyzer {
     try {
       // Create landmark map for easier access
       Map<PoseLandmarkType, PoseLandmark> landmarkMap = PoseUtils.createLandmarkMap(pose);
+      
+      // Check user positioning first (sideways vs facing camera)
+      _analyzeFacingDirection(landmarkMap);
       
       // Process both arms
       leftArmAnalysis.analyzePose(landmarkMap);
@@ -234,6 +241,49 @@ class BicepCurlAnalyzer {
     }
   }
   
+  /// Analyze if the user is facing sideways (correct) or facing the camera (incorrect)
+  void _analyzeFacingDirection(Map<PoseLandmarkType, PoseLandmark> landmarks) {
+    final leftShoulder = landmarks[PoseLandmarkType.leftShoulder];
+    final rightShoulder = landmarks[PoseLandmarkType.rightShoulder];
+    final nose = landmarks[PoseLandmarkType.nose];
+    
+    // If key points aren't visible, can't determine direction
+    if (leftShoulder == null || rightShoulder == null || nose == null ||
+        leftShoulder.likelihood < VISIBILITY_THRESHOLD ||
+        rightShoulder.likelihood < VISIBILITY_THRESHOLD ||
+        nose.likelihood < VISIBILITY_THRESHOLD) {
+      facingDirection = "UNK";
+      return;
+    }
+    
+    // Calculate shoulder width (distance between shoulders)
+    double shoulderWidth = PoseUtils.calculateDistance(
+      [leftShoulder.x, leftShoulder.y],
+      [rightShoulder.x, rightShoulder.y],
+    );
+    
+    // Calculate midpoint of shoulders
+    List<double> shoulderMidpoint = [
+      (leftShoulder.x + rightShoulder.x) / 2,
+      (leftShoulder.y + rightShoulder.y) / 2
+    ];
+    
+    // Check if nose is aligned with shoulder midpoint
+    // If facing the camera, nose should be close to shoulder midpoint horizontally
+    double noseToMidpointHorizontalDiff = (nose.x - shoulderMidpoint[0]).abs();
+    
+    // Calculate relative distance (normalized by shoulder width to handle different distances from camera)
+    double relativeHorizontalDiff = noseToMidpointHorizontalDiff / shoulderWidth;
+    
+    // When user is facing sideways, the nose will be significantly off-center from shoulder midpoint
+    // When user is facing the camera, the nose will be close to the midpoint
+    if (relativeHorizontalDiff > 0.25) { // Threshold for sideways orientation
+      facingDirection = "Sideways";
+    } else {
+      facingDirection = "Facing Camera";
+    }
+  }
+  
   /// Get the currently active arm's analysis
   ArmAnalysis get activeArmAnalysis {
     return activeArm == "left" ? leftArmAnalysis : rightArmAnalysis;
@@ -241,6 +291,11 @@ class BicepCurlAnalyzer {
   
   /// Get feedback text based on active arm's analysis
   String getFormFeedback() {
+    // First, check if the user is in the correct position for bicep curls
+    if (facingDirection == "Facing Camera") {
+      return "Please turn sideways to the camera for proper bicep curl analysis";
+    }
+    
     // If no arm is visible
     if (activeArm == "none") {
       return "Position yourself so your arms are visible";

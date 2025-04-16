@@ -478,6 +478,7 @@ class _LogFoodManuallyScreenState extends State<LogFoodManuallyScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFFAFAFA),
       appBar: AppBar(
         title: Text(
           'LOG FOOD',
@@ -488,7 +489,7 @@ class _LogFoodManuallyScreenState extends State<LogFoodManuallyScreen> {
           ),
         ),
         centerTitle: true,
-        backgroundColor: Colors.white,
+        backgroundColor:Colors.white,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
       ),

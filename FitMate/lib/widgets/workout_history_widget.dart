@@ -11,25 +11,24 @@ class WorkoutHistoryWidget extends StatelessWidget {
 
   const WorkoutHistoryWidget({
     Key? key,
-    this.initialVisibleCount = 3, // Show only 3 items initially
-    this.showViewAllButton = true, // Hide view all button by default now
+    this.initialVisibleCount = 3,
+    this.showViewAllButton = true,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     final viewModel = Provider.of<WorkoutViewModel>(context);
-    // Sort workouts by date, most recent first
     final workoutHistory = viewModel.workoutHistory
       ..sort((a, b) => b.date.compareTo(a.date));
 
-    // Calculate the actual height based on available workouts
     final int itemCount = workoutHistory.length > initialVisibleCount
         ? initialVisibleCount
         : workoutHistory.length;
-    final double listHeight = itemCount > 0 ? itemCount * 85.0 : 80.0; // 80px height for empty state
+    final double listHeight = itemCount > 0 ? itemCount * 85.0 : 80.0;
 
     return Card(
       elevation: 8,
+      color: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -76,7 +75,6 @@ class WorkoutHistoryWidget extends StatelessWidget {
                   },
                 ),
               ),
-            // View All button has been removed as requested
           ],
         ),
       ),
@@ -102,8 +100,6 @@ class WorkoutHistoryWidget extends StatelessWidget {
       ),
     );
   }
-
-  // Removed _showAllWorkoutsDialog method as it's no longer needed
 
   Widget _buildWorkoutHistoryItem(BuildContext context, CompletedWorkout workout) {
     return Padding(
@@ -254,9 +250,9 @@ class WorkoutDetailPopup extends StatelessWidget {
     final isCardio = workout.isCardioWorkout();
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFFAFAFA),
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFFFAFAFA),
         elevation: 0,
         title: Text(
           workout.category,
@@ -287,6 +283,7 @@ class WorkoutDetailPopup extends StatelessWidget {
           children: [
             Card(
               elevation: 4,
+              color: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: Padding(
                 padding: const EdgeInsets.all(20.0),
@@ -390,11 +387,11 @@ class WorkoutDetailPopup extends StatelessWidget {
                                 FractionallySizedBox(
                                   widthFactor: workout.completion,
                                   child: Container(
-                                    decoration: BoxDecoration(
+                                    decoration: const BoxDecoration(
                                       gradient: LinearGradient(
                                         colors: [
-                                          const Color(0xFFE7FC00),
-                                          const Color(0xFFD2EB50),
+                                          Color(0xFFE7FC00),
+                                          Color(0xFFD2EB50),
                                         ],
                                       ),
                                     ),
@@ -410,7 +407,6 @@ class WorkoutDetailPopup extends StatelessWidget {
                 ),
               ),
             ),
-
             const SizedBox(height: 24),
             if (workout.performedExercises != null && workout.performedExercises!.isNotEmpty)
               Column(
@@ -464,6 +460,7 @@ class WorkoutDetailPopup extends StatelessWidget {
   }) {
     return Expanded(
       child: Container(
+
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: color.withOpacity(0.1),
@@ -512,6 +509,7 @@ class WorkoutDetailPopup extends StatelessWidget {
       return Card(
         margin: const EdgeInsets.only(bottom: 12),
         elevation: 2,
+        color: Colors.white,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
           side: BorderSide(
@@ -594,6 +592,7 @@ class WorkoutDetailPopup extends StatelessWidget {
       return Card(
         margin: const EdgeInsets.only(bottom: 12),
         elevation: 2,
+        color: Colors.white,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
           side: BorderSide(
@@ -743,9 +742,9 @@ class AllWorkoutsPopup extends StatelessWidget {
       ..sort((a, b) => b.date.compareTo(a.date));
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFFAFAFA),
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFFFAFAFA),
         elevation: 0,
         title: Text(
           'ALL WORKOUTS',
@@ -810,7 +809,6 @@ class AllWorkoutsPopup extends StatelessWidget {
             onTap: workout.hasDetails()
                 ? () {
               Navigator.of(context).pop();
-              // Show workout details
               showDialog(
                 context: context,
                 builder: (context) => Dialog(

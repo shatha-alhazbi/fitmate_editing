@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:lottie/lottie.dart' hide LottieCache;
 import 'firebase_options.dart';
 
 // Config
@@ -25,6 +26,7 @@ import 'package:fitmate/services/workout_service.dart';
 import 'package:fitmate/repositories/food_repository.dart';
 import 'package:fitmate/services/food_recognition_services.dart';
 import 'package:fitmate/services/food_logging_service.dart';
+import 'package:fitmate/utils/lottie_cache.dart';
 
 void main() async {
   // Ensure widgets are initialized before Firebase
@@ -77,7 +79,7 @@ class MyApp extends StatelessWidget {
           primarySwatch: Colors.blue,
           visualDensity: VisualDensity.adaptivePlatformDensity,
         ),
-        home: const SplashScreen(), // Start with SplashScreen
+        home: const AnimationPreloader(child: SplashScreen()), // Using preloader with SplashScreen
         routes: {
           '/login': (context) => const LoginPage(),
           '/forgot-password': (context) => const ForgotPasswordPage(),
@@ -88,6 +90,61 @@ class MyApp extends StatelessWidget {
         },
       ),
     );
+  }
+}
+
+// Animation preloader class to preload animations without changing existing flow
+class AnimationPreloader extends StatefulWidget {
+  final Widget child;
+  
+  const AnimationPreloader({
+    Key? key,
+    required this.child,
+  }) : super(key: key);
+
+  @override
+  State<AnimationPreloader> createState() => _AnimationPreloaderState();
+}
+
+class _AnimationPreloaderState extends State<AnimationPreloader> {
+  bool _isPreloading = true;
+  
+  @override
+  void initState() {
+    super.initState();
+    _preloadAnimations();
+  }
+  
+  Future<void> _preloadAnimations() async {
+    // Start loading animations in the background
+    try {
+      // Preload the placeholder image
+      await precacheImage(
+        const AssetImage('assets/data/images/mascot/celebration_mascot.png'), 
+        context
+      );
+      
+      // Start preloading Lottie animations
+      LottieCache().preloadAnimation('assets/data/lottie/celebration_mascot.json');
+      
+      // Wait just a tiny bit to ensure loading has started
+      await Future.delayed(const Duration(milliseconds: 100));
+    } catch (e) {
+      print('Error starting animation preload: $e');
+    }
+    
+    // Don't wait for animations to fully load - just continue with the app flow
+    if (mounted) {
+      setState(() {
+        _isPreloading = false;
+      });
+    }
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    // Just render the child - the preloading happens in the background
+    return widget.child;
   }
 }
 

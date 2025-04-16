@@ -1,9 +1,8 @@
 import 'dart:math';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
 import 'package:fitmate/screens/login_screens/edit_profile.dart';
+import 'package:fitmate/screens/nutrition_screens/nutrition_screen.dart';
 import 'package:fitmate/viewmodels/home_page_viewmodel.dart';
 import 'package:fitmate/viewmodels/tip_viewmodel.dart';
 import 'package:fitmate/widgets/caloriesWidget.dart';
@@ -33,19 +32,21 @@ class _HomePageState extends State<HomePage>
   @override
   void initState() {
     super.initState();
+    
+    // Initialize view model and load data
     _viewModel = Provider.of<HomePageViewModel>(context, listen: false);
     _viewModel.loadUserData();
+    
+    _levelAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
 
     // Initialize the TipViewModel
     final tipViewModel = Provider.of<TipViewModel>(context, listen: false);
     if (tipViewModel.tipData.isEmpty) {
       tipViewModel.init();
     }
-
-    _levelAnimationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    );
 
     // Play the animation once when the page loads
     Future.delayed(const Duration(milliseconds: 500), () {
@@ -78,51 +79,88 @@ class _HomePageState extends State<HomePage>
     return Consumer<HomePageViewModel>(
       builder: (context, viewModel, child) {
         return Scaffold(
+          backgroundColor: const Color(0xFFFAFAFA),
           body: SafeArea(
-            child: viewModel.isLoading
-                ? Center(
-                    child: CircularProgressIndicator(
-                      color: const Color(0xFFD2EB50),
-                    ),
-                  )
-                : SingleChildScrollView(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        HeaderWidget(
-                          userName: viewModel.userFullName,
-                          userGoal: viewModel.userGoal,
-                          profileImage: viewModel.profileImage,
-                          onProfileTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (context) =>
-                                      const EditProfilePage()),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 24),
-                        PersonalizedTipBox(
-                          onRefresh: _refreshTip,
-                          elevation: 2.0,
-                          showAnimation: true,
-                        ),
-                        const SizedBox(height: 16),
-                        const UserLevelWidget(),
-                        const SizedBox(height: 16),
-                        CaloriesSummaryWidget(
-                          totalCalories: viewModel.totalCalories,
-                          dailyCaloriesGoal: viewModel.dailyCaloriesGoal,
-                        ),
-                        const SizedBox(height: 16),
-                        const WorkoutStreakWidget(),
-                        const SizedBox(height: 16),
-                        const WaterIntakeGlassWidget(),
-                      ],
+            child: Stack(
+              children: [
+                // Always render the content
+                SingleChildScrollView(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      HeaderWidget(
+                        userName: viewModel.userFullName,
+                        userGoal: viewModel.userGoal,
+                        profileImage: viewModel.profileImage,
+                        onProfileTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) => const EditProfilePage()),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 24),
+                      PersonalizedTipBox(
+                        onRefresh: _refreshTip,
+                        elevation: 2.0,
+                        showAnimation: true,
+                      ),
+                      const SizedBox(height: 16),
+                      const UserLevelWidget(),
+                      const SizedBox(height: 16),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => NutritionPage()),
+                      );
+                    },
+                    child: CaloriesSummaryWidget(
+                      totalCalories: viewModel.totalCalories,
+                      dailyCaloriesGoal: viewModel.dailyCaloriesGoal,
                     ),
                   ),
+                      const SizedBox(height: 16),
+                      const WorkoutStreakWidget(),
+                      const SizedBox(height: 16),
+                      const WaterIntakeGlassWidget(),
+                      // Add extra padding at the bottom when loading
+                      viewModel.isLoading ? const SizedBox(height: 80) : const SizedBox(),
+                    ],
+                  ),
+                ),
+                // Loading indicator at the bottom
+                if (viewModel.isLoading)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(16.0),
+                      color: Colors.white,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            "Loading your fitness data...",
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const CircularProgressIndicator(
+                            color: Color(0xFFD2EB50),
+                            strokeWidth: 3.0,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
           bottomNavigationBar: BottomNavBar(
             currentIndex: _selectedIndex,

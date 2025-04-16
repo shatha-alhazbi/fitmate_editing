@@ -65,6 +65,7 @@ class _TodaysWorkoutScreenContentState extends State<_TodaysWorkoutScreenContent
     return Consumer<TodaysWorkoutViewModel>(
       builder: (context, viewModel, child) {
         return Scaffold(
+          backgroundColor: const Color(0xFFFAFAFA),
           appBar: AppBar(
             title: Text(
               viewModel.workoutCategory.isNotEmpty 

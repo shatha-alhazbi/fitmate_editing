@@ -51,6 +51,7 @@ class _FormListPageState extends State<FormListPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFFAFAFA),
       appBar: AppBar(
         title: Text(
           'Form Check',
@@ -72,7 +73,7 @@ class _FormListPageState extends State<FormListPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             decoration: BoxDecoration(
-              color: const Color(0xFFD2EB50).withOpacity(0.1),
+              color: const Color.fromARGB(255, 249, 255, 218).withOpacity(0.1),
               borderRadius: const BorderRadius.only(
                 bottomLeft: Radius.circular(20),
                 bottomRight: Radius.circular(20),

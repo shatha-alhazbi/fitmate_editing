@@ -3,11 +3,12 @@ import 'package:camera/camera.dart';
 import 'package:google_ml_kit/google_ml_kit.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
-import  'package:fitmate/services/voice_feedback_service.dart';
+import 'package:fitmate/services/voice_feedback_service.dart';
 import 'analyzers/squat_analyzer.dart';
 import 'widgets/exercise_ui_components.dart';
 import 'base_exercise_detection_screen.dart';
 import 'package:fitmate/widgets/pose_painter.dart';
+import 'dart:math' as math;
 
 class SquatDetectionScreen extends BaseExerciseDetectionScreen {
   const SquatDetectionScreen({Key? key}) 
@@ -21,13 +22,14 @@ class _SquatDetectionScreenState extends BaseExerciseDetectionState<SquatDetecti
   late SquatAnalyzer analyzer;
   late VoiceFeedbackService voiceFeedback;
   String lastFormFeedback = '';
+  String lastPositionFeedback = '';
+  bool hasSpokenPositionFeedback = false;
 
   // UI enhancement vars
   bool showCountdown = true;
   int countdownValue = 3;
   bool showPoseGuide = true;
   bool showDebugInfo = false;
-
   
   @override
   void initState() {
@@ -43,6 +45,16 @@ class _SquatDetectionScreenState extends BaseExerciseDetectionState<SquatDetecti
     
     // Start countdown
     _startCountdown();
+    
+    // Delay the start of voice feedback
+    Future.delayed(Duration(seconds: 8), () {
+      if (mounted) {
+        print("Voice feedback system activated");
+        // This marks when we start allowing voice feedback
+        lastFormFeedbackTime = DateTime.now().millisecondsSinceEpoch;
+        lastPositiveFeedbackTime = DateTime.now().millisecondsSinceEpoch;
+      }
+    });
   }
 
   Future<void> _initializeServices() async {
@@ -64,14 +76,6 @@ class _SquatDetectionScreenState extends BaseExerciseDetectionState<SquatDetecti
           } else {
             // When we reach 1, set showCountdown to false
             showCountdown = false;
-            // Show pose guide briefly
-            Future.delayed(Duration(seconds: 3), () {
-              if (mounted) {
-                setState(() {
-                  showPoseGuide = false;
-                });
-              }
-            });
           }
         });
       }
@@ -91,25 +95,83 @@ class _SquatDetectionScreenState extends BaseExerciseDetectionState<SquatDetecti
   Future<void> processPose(Pose pose) async {
     // Process pose using the squat analyzer
     analyzer.analyzePose(pose);
-     // Get current feedback text
-    String currentFeedback = analyzer.getFormFeedback();
     
-    // Check if feedback has changed
-    if (currentFeedback != lastFormFeedback) {
-      print("Feedback changed to: $currentFeedback");
-      lastFormFeedback = currentFeedback;
+    // Check position feedback first
+    String currentPositionFeedback = '';
+    if (analyzer.facingDirection == "Sideways") {
+      currentPositionFeedback = "Please face the camera directly for proper squat analysis";
+    }
+    
+    // Handle position feedback with voice
+    if (currentPositionFeedback.isNotEmpty && 
+        (currentPositionFeedback != lastPositionFeedback || !hasSpokenPositionFeedback)) {
+      print("Speaking position feedback: $currentPositionFeedback");
+      voiceFeedback.speak(currentPositionFeedback);
+      lastPositionFeedback = currentPositionFeedback;
+      hasSpokenPositionFeedback = true;
       
-      // Determine if this feedback should be spoken
-      bool shouldSpeak = shouldSpeakFeedback(currentFeedback);
+      // Reset the flag after 10 seconds to allow reminding again if needed
+      Future.delayed(Duration(seconds: 10), () {
+        if (mounted) {
+          hasSpokenPositionFeedback = false;
+        }
+      });
+    } else if (currentPositionFeedback.isEmpty) {
+      // Reset when position is correct
+      lastPositionFeedback = '';
+      hasSpokenPositionFeedback = false;
+    }
+    
+    // Only process form feedback if position is correct
+    if (analyzer.facingDirection != "Sideways") {
+      // Get current form feedback text
+      String currentFormFeedback = analyzer.getFormFeedback();
+      int currentTime = DateTime.now().millisecondsSinceEpoch;
       
-      if (shouldSpeak) {
-        print("Speaking feedback: $currentFeedback");
-        voiceFeedback.speak(currentFeedback);
+      // Check if feedback has changed
+      if (currentFormFeedback != lastFormFeedback) {
+        print("Feedback changed to: $currentFormFeedback");
+        lastFormFeedback = currentFormFeedback;
+        
+        // Determine if this feedback should be spoken
+        bool shouldSpeak = shouldSpeakFeedback(currentFormFeedback);
+        
+        // Check if enough time has passed since last feedback
+        bool timeCheckPassed = (currentTime - lastFormFeedbackTime) > minMsBetweenFormFeedback;
+        
+        if (shouldSpeak && timeCheckPassed) {
+          print("Speaking feedback: $currentFormFeedback");
+          voiceFeedback.speak(currentFormFeedback);
+          lastFormFeedbackTime = currentTime;
+        }
+      }
+      
+      // Provide occasional positive feedback when form is good
+      // Check if form indicators suggest good form
+      bool goodForm = analyzer.footPlacement == "Good" && 
+                     analyzer.kneePlacement == "Good" &&
+                     currentFormFeedback.contains("Good");
+                     
+      if (goodForm) {
+        // Check if enough time has passed since last positive feedback
+        bool positiveTimeCheckPassed = (currentTime - lastPositiveFeedbackTime) > minMsBetweenPositiveFeedback;
+        
+        if (positiveTimeCheckPassed) {
+          // Select a random positive feedback message
+          final random = math.Random();
+          final message = positiveFeedbackMessages[random.nextInt(positiveFeedbackMessages.length)];
+          
+          print("Speaking positive feedback: $message");
+          voiceFeedback.speak(message);
+          lastPositiveFeedbackTime = currentTime;
+        }
       }
     }
+    
     // Update UI after processing
     if (mounted) setState(() {});
   }
+  
   // Determine which feedback messages should be spoken
   bool shouldSpeakFeedback(String feedback) {
     // List of important feedback phrases to speak out loud
@@ -128,6 +190,28 @@ class _SquatDetectionScreenState extends BaseExerciseDetectionState<SquatDetecti
     return false;
   }
   
+  // Delay between form feedback voice messages
+  int lastFormFeedbackTime = 0;
+  final int minMsBetweenFormFeedback = 4000; // 4 seconds between feedback
+  
+  // For positive feedback when form is good
+  int lastPositiveFeedbackTime = 0;
+  final int minMsBetweenPositiveFeedback = 15000; // 15 seconds between positive feedback
+  final List<String> positiveFeedbackMessages = [
+    "Excellent form",
+    "Great job, keep it up",
+    "Perfect form, you're doing great",
+    "You've got it, excellent technique"
+  ];
+  
+  @override
+  void dispose() {
+    // Clean up voice feedback
+    voiceFeedback.stop();
+    print("Voice feedback stopped");
+    super.dispose();
+  }
+  
   @override
   Widget buildExerciseUI() {
     return Stack(
@@ -142,21 +226,7 @@ class _SquatDetectionScreenState extends BaseExerciseDetectionState<SquatDetecti
           ),
         ),
         
-        // Pose guide overlay (transparent outline of correct form)
-        if (showPoseGuide && !showCountdown)
-          Positioned.fill(
-            child: Opacity(
-              opacity: 0.4,
-              child: Container(
-                alignment: Alignment.center,
-                child: Image.asset(
-                  'assets/data/images/workouts/image 2.png',
-                  height: MediaQuery.of(context).size.height * 0.7,
-                  fit: BoxFit.contain,
-                ),
-              ),
-            ),
-          ),
+        // Pose guide removed
         
         // Pose overlay when pose is detected
         if (currentPose != null && !showCountdown)
@@ -222,31 +292,44 @@ class _SquatDetectionScreenState extends BaseExerciseDetectionState<SquatDetecti
           ),
         
         if (!showCountdown) ...[
-          // Top status row - Counter and Foot placement with enhanced design
+          // Position warning if user is not facing the camera
+          if (analyzer.facingDirection == "Sideways")
+            Positioned(
+              top: 160,
+              left: 0,
+              right: 0,
+              child: Container(
+                margin: EdgeInsets.symmetric(horizontal: 20),
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded, color: Colors.white, size: 30),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        "Please face the camera directly for proper squat analysis",
+                        style: GoogleFonts.dmSans(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          
+          // No longer needed since status row is at the top
+          
+          // Status row - moved back to the top
           Positioned(
             top: 0,
-            left: 0,
-            right: 0,
-            child: ExerciseUIComponents.buildStatusRow(
-              statusBoxes: [
-                // Reps counter with animation
-                ExerciseUIComponents.buildRepCounter(
-                  count: analyzer.counter,
-                ),
-                
-                // Foot placement status
-                ExerciseUIComponents.buildStatusBox(
-                  label: 'FEET',
-                  value: analyzer.footPlacement,
-                  color: ExerciseUIComponents.getStatusColor(analyzer.footPlacement),
-                ),
-              ],
-            ),
-          ),
-          
-          // Second status row - Knee placement and Current stage
-          Positioned(
-            top: 80,
             left: 0,
             right: 0,
             child: ExerciseUIComponents.buildStatusRow(
@@ -254,67 +337,19 @@ class _SquatDetectionScreenState extends BaseExerciseDetectionState<SquatDetecti
                 // Knee placement
                 ExerciseUIComponents.buildStatusBox(
                   label: 'KNEES',
-                  value: analyzer.kneePlacement,
+                  value: analyzer.kneePlacement == "UNK" ? '—' : analyzer.kneePlacement,
                   color: ExerciseUIComponents.getStatusColor(analyzer.kneePlacement),
                 ),
                 
-                // Current stage with icon
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: analyzer.currentStage == "down" 
-                        ? Colors.orange 
-                        : ExerciseUIComponents.primaryColor,
-                    borderRadius: BorderRadius.circular(8),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black26,
-                        blurRadius: 4,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'STAGE',
-                        style: GoogleFonts.dmSans(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            analyzer.currentStage == "down" 
-                                ? Icons.arrow_downward 
-                                : Icons.arrow_upward,
-                            color: Colors.white,
-                            size: 16,
-                          ),
-                          SizedBox(width: 4),
-                          Text(
-                            analyzer.currentStage.toUpperCase(),
-                            style: GoogleFonts.bebasNeue(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                // Foot placement
+                ExerciseUIComponents.buildStatusBox(
+                  label: 'FEET',
+                  value: analyzer.footPlacement == "UNK" ? '—' : analyzer.footPlacement,
+                  color: ExerciseUIComponents.getStatusColor(analyzer.footPlacement),
                 ),
               ],
             ),
           ),
-          
-          
-          
           
           // Bottom feedback and instructions
           Positioned(
@@ -327,29 +362,11 @@ class _SquatDetectionScreenState extends BaseExerciseDetectionState<SquatDetecti
                 ExerciseUIComponents.buildFeedbackBox(
                   feedbackText: analyzer.getFormFeedback(),
                 ),
-                
-                
               ],
             ),
           ),
           
-          // Help button
-          Positioned(
-            top: 20,
-            right: 20,
-            child: FloatingActionButton(
-              mini: true,
-              backgroundColor: Colors.black54,
-              child: Icon(Icons.help_outline, color: Colors.white),
-              onPressed: () {
-                setState(() {
-                  showPoseGuide = !showPoseGuide;
-                });
-              },
-            ),
-          ),
-          
-      
+          // Help button removed
         ],
       ],
     );
